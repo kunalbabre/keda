@@ -1,7 +1,7 @@
 ##################################################
 # Variables                                      #
 ##################################################
-IMAGE_TAG      ?= 0.0.4
+IMAGE_TAG      ?= 1.0.0
 IMAGE_REGISTRY ?= docker.io
 IMAGE_REPO     ?= kedacore
 
@@ -99,6 +99,43 @@ build-chart-edge:
 .PHONY: publish-edge-chart
 publish-edge-chart: build-chart-edge
 	$(eval CHART := $(shell find . -maxdepth 1 -type f -iname 'keda-edge-$(IMAGE_TAG)-*' -print -quit))
+	@az storage blob upload \
+		--container-name helm \
+		--name $(CHART) \
+		--file $(CHART) \
+		--account-name kedacore \
+		--sas-token "$(STORAGE_HELM_SAS_TOKEN)"
+
+	@az storage blob download \
+		--container-name helm \
+		--name index.yaml \
+		--file old_index.yaml \
+		--account-name kedacore \
+		--sas-token "$(STORAGE_HELM_SAS_TOKEN)" 2>/dev/null | true
+
+	[ -s ./old_index.yaml ] && helm repo index . --url https://kedacore.azureedge.net/helm --merge old_index.yaml || true
+	[ ! -s ./old_index.yaml ] && helm repo index . --url https://kedacore.azureedge.net/helm || true
+
+	@az storage blob upload \
+		--container-name helm \
+		--name index.yaml \
+		--file index.yaml \
+		--account-name kedacore \
+		--sas-token "$(STORAGE_HELM_SAS_TOKEN)"
+
+.PHONY: build-chart
+build-chart:
+	rm -rf /tmp/keda
+	cp -r -L chart/keda /tmp/keda
+	sed -i "s/^version:.*/version: $(IMAGE_TAG)-$(DATE)-$(GIT_VERSION)/g" /tmp/keda/Chart.yaml
+	sed -i "s/^appVersion:.*/appVersion: $(GIT_VERSION)/g" /tmp/keda/Chart.yaml
+
+	helm lint /tmp/keda/
+	helm package /tmp/keda/
+
+.PHONY: publish-chart
+publish-chart: build-chart
+	$(eval CHART := $(shell find . -maxdepth 1 -type f -iname 'keda-$(IMAGE_TAG)-*' -print -quit))
 	@az storage blob upload \
 		--container-name helm \
 		--name $(CHART) \

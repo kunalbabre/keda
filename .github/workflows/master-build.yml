@@ -37,7 +37,7 @@ jobs:
       - name: Publish helm
         env:
           STORAGE_HELM_SAS_TOKEN: ${{ secrets.STORAGE_HELM_SAS_TOKEN }}
-        run: helm init --client-only && make publish-edge-chart
+        run: helm init --client-only && make publish-chart
 
       - name: Run end to end tests
         env:
